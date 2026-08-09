@@ -65,31 +65,100 @@ async function run() {
     
 app.get("/api/lessons", async (req, res) => {
   try {
-    const { search, category } = req.query;
+    const { search, category, page, limit } = req.query;
 
-    const filter = {
-      visibility: "Public",
-    };
+    // const currentPage = Math.max(parseInt(page, 10) || 1, 1);
+    // const perPage = Math.min(
+    //   Math.max(parseInt(limit, 10) || 9, 1),
+    //   50
+    // );
 
-    // Search by title
-    if (search) {
-      filter.title = {
-        $regex: search,
-        $options: "i",
-      };
-    }
+    // const skip = (currentPage - 1) * perPage;
 
-    // Filter by category
-    if (category) {
-      filter.category = category;
-    }
+    // const filter = {
+    //   visibility: "Public",
+    // };
 
-    const lessons = await lessonCollection
-      .find(filter)
-      .sort({ _id: -1 })
-      .toArray();
+    // // Search by title
+    // if (search) {
+    //   filter.title = {
+    //     $regex: search,
+    //     $options: "i",
+    //   };
+    // }
 
-    res.send(lessons);
+    // // Filter by category
+    // if (category) {
+    //   filter.category = category;
+    // }
+
+    // const total = await lessonCollection.countDocuments(
+    //   filter);
+    
+
+    // const lessons = await lessonCollection
+    //   .find(filter)
+    //   .sort({ _id: -1 })
+    //   .skip(skip),
+    //   .limit(perPage)
+    //   .toArray();
+
+    // res.send(lessons);
+
+    // New code
+    const currentPage = Math.max(
+  parseInt(page, 10) || 1,
+  1
+);
+
+const perPage = Math.min(
+  Math.max(parseInt(limit, 10) || 9, 1),
+  50
+);
+
+// const skip = (currentPage - 1) * perPage;
+const skip = (page - 1) * limit;
+
+const filter = {
+  visibility: "Public",
+};
+
+if (search && search.trim()) {
+  filter.title = {
+    $regex: search.trim(),
+    $options: "i",
+  };
+}
+
+if (category && category.trim()) {
+  filter.category = category.trim();
+}
+
+const total = await lessonCollection.countDocuments(filter);
+
+const lessons = await lessonCollection
+  .find(filter)
+  .sort({ createdAt: -1 })
+  .skip(skip)
+  .limit(perPage)
+  .toArray();
+
+const totalPages = Math.ceil(
+  total / limit);
+
+res.send({
+  lessons,
+  pagination: {
+    currentPage: page,
+    perPage: limit,
+    total,
+    totalPages,
+    hasNextPage:
+      page < totalPages,
+    hasPreviousPage:
+      page > 1,
+  },
+});
 
   } catch (error) {
     res.status(500).send({
@@ -182,11 +251,6 @@ if (
   }
 });
 
-app.get('/lessons', async(req, res) => {
-  const result = await lessonCollection.find().toArray()
-
-  res.send(result);
-});
 
 // Count lessons
 app.get("/api/users/:id/lesson-count", async(req, res) => {
@@ -236,23 +300,7 @@ app.post("/api/favorites", async (req, res) => {
 });
 
 
-// Favorites count
-// app.get("/api/favorites/count/:lessonId", async (req, res) => {
-//   try {
-//     const lessonId = req.params.lessonId;
 
-//     const count = await favoriteCollection.countDocuments({
-//       lessonId: new ObjectId(lessonId),
-//     });
-
-//     res.send({ count });
-
-//   } catch (err) {
-//     res.status(500).send({
-//       message: err.message,
-//     });
-//   }
-// });
 
 app.get("/api/favorites/count/:lessonId", async (req, res) => {
   const count = await favoriteCollection.countDocuments({
@@ -304,8 +352,6 @@ app.delete("/api/favorites", async (req, res) => {
 });
 
 });
-
-
 
 
 // Toggle Like
@@ -913,6 +959,391 @@ app.get("/api/profile/lessons/:userId", async (req, res) => {
   } catch (err) {
     res.status(500).send({
       message: err.message,
+    });
+  }
+});
+
+// Dashboard Admin Home
+app.get("/api/admin/dashboard", async (req, res) => {
+  try {
+    const totalUsers =
+      await userCollection.countDocuments();
+
+      const totalPublicLessons =
+      await lessonCollection.countDocuments({
+        visibility: "Public",
+      });
+
+      const totalReportedLessons =
+      await reportCollection.countDocuments();
+
+      // Today's New Lessons
+      const startOfToday = new Date();
+
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const todaysNewLessons =
+      await lessonCollection.countDocuments({
+        createdAt: {
+          $gte: startOfToday,
+          $lte: endOfToday,
+        },
+      });
+
+      // Active contributors
+      const mostActiveContributors =
+      await lessonCollection
+        .aggregate([
+          {
+            $match: {
+              authorId: {
+                $exists: true,
+                $ne: null,
+              },
+            },
+          },
+
+          {
+            $group: {
+              _id: "$authorId",
+              lessonCount: {
+                $sum: 1,
+              },
+            },
+          },
+          {
+            $sort: {
+              lessonCount: -1,
+            },
+          },
+
+          {
+            $limit: 5,
+          },
+        ])
+        .toArray();
+
+         const contributors =
+      await Promise.all(
+        mostActiveContributors.map(
+          async (item) => {
+
+            let user = null;
+
+            try {
+              user =
+                await userCollection.findOne({
+                  _id: new ObjectId(
+                    item._id
+                  ),
+                });
+            } catch {
+              // authorId may not be ObjectId
+            }
+
+             return {
+              userId: item._id,
+              name:
+                user?.name ||
+                "Unknown User",
+              email:
+                user?.email || "",
+              image:
+                user?.image || "",
+              lessonCount:
+                item.lessonCount,
+            };
+          }
+        )
+      );
+
+      // Lesson Growth Last 12 Months
+
+      const monthNames = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+      
+// const lessonGrowth = await lessonCollection
+//   .aggregate([
+//     {
+//       $match: {
+//         createdAt: {
+//           $exists: true,
+//         },
+//       },
+//     },
+
+//     {
+//       $group: {
+//         _id: {
+//           year: {
+//             $year: "$createdAt",
+//           },
+//           month: {
+//             $month: "$createdAt",
+//           },
+//         },
+
+//         lessons: {
+//           $sum: 1,
+//         },
+//       },
+//     },
+
+//     {
+//       $sort: {
+//         "_id.year": 1,
+//         "_id.month": 1,
+//       },
+//     },
+
+//     {
+//       $limit: 12,
+//     },
+//   ])
+//   .toArray();
+
+// New code
+const lessonGrowth =
+  await lessonCollection
+    .aggregate([
+      {
+        $match: {
+          createdAt: {
+            $exists: true,
+            $ne: null,
+          },
+        },
+      },
+
+      {
+        $addFields: {
+          growthDate: {
+            $convert: {
+              input: "$createdAt",
+              to: "date",
+              onError: null,
+              onNull: null,
+            },
+          },
+        },
+      },
+
+      {
+        $match: {
+          growthDate: {
+            $ne: null,
+          },
+        },
+      },
+
+      {
+        $group: {
+          _id: {
+            year: {
+              $year: "$growthDate",
+            },
+            month: {
+              $month: "$growthDate",
+            },
+          },
+
+          lessons: {
+            $sum: 1,
+          },
+        },
+      },
+
+      {
+        $sort: {
+          "_id.year": 1,
+          "_id.month": 1,
+        },
+      },
+
+      {
+        $limit: 12,
+      },
+    ])
+    .toArray();
+
+
+// ==========================================
+// User Growth - Last 12 Months
+// ==========================================
+
+// const userGrowth = await userCollection
+//   .aggregate([
+//     {
+//       $match: {
+//         createdAt: {
+//           $exists: true,
+//         },
+//       },
+//     },
+
+//     {
+//       $group: {
+//         _id: {
+//           year: {
+//             $year: "$createdAt",
+//           },
+//           month: {
+//             $month: "$createdAt",
+//           },
+//         },
+
+//         users: {
+//           $sum: 1,
+//         },
+//       },
+//     },
+
+//     {
+//       $sort: {
+//         "_id.year": 1,
+//         "_id.month": 1,
+//       },
+//     },
+
+//     {
+//       $limit: 12,
+//     },
+//   ])
+//   .toArray();
+
+// New Code
+const userGrowth =
+  await userCollection
+    .aggregate([
+      {
+        $match: {
+          createdAt: {
+            $exists: true,
+            $ne: null,
+          },
+        },
+      },
+
+      {
+        $addFields: {
+          growthDate: {
+            $convert: {
+              input: "$createdAt",
+              to: "date",
+              onError: null,
+              onNull: null,
+            },
+          },
+        },
+      },
+
+      {
+        $match: {
+          growthDate: {
+            $ne: null,
+          },
+        },
+      },
+
+      {
+        $group: {
+          _id: {
+            year: {
+              $year: "$growthDate",
+            },
+            month: {
+              $month: "$growthDate",
+            },
+          },
+
+          users: {
+            $sum: 1,
+          },
+        },
+      },
+
+      {
+        $sort: {
+          "_id.year": 1,
+          "_id.month": 1,
+        },
+      },
+
+      {
+        $limit: 12,
+      },
+    ])
+    .toArray();
+
+  const formattedLessonGrowth =
+  lessonGrowth.map((item) => ({
+    month:
+      monthNames[item._id.month - 1],
+    lessons: item.lessons,
+  }));
+
+
+const formattedUserGrowth =
+  userGrowth.map((item) => ({
+    month:
+      monthNames[item._id.month - 1],
+    users: item.users,
+  }));
+
+
+      // Send dashboard data
+    //    res.send({
+    //   totalUsers,
+    //   totalPublicLessons,
+    //   totalReportedLessons,
+    //   todaysNewLessons,
+    //   mostActiveContributors:
+    //     contributors,
+    // });
+
+    // New res.send
+  res.send({
+  totalUsers,
+  totalPublicLessons,
+  totalReportedLessons,
+  todaysNewLessons,
+
+  mostActiveContributors: contributors,
+
+  lessonGrowth: formattedLessonGrowth,
+
+  userGrowth: formattedUserGrowth,
+});
+
+
+  } catch (error) {
+
+    console.error(
+      "Admin dashboard error:",
+      error
+    );
+
+    res.status(500).send({
+      message:
+        "Failed to load admin dashboard",
+      error: error.message,
     });
   }
 });
