@@ -1348,6 +1348,108 @@ const formattedUserGrowth =
   }
 });
 
+// GET ADMIN USERS
+
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    const users = await userCollection
+      .aggregate([
+        {
+          $lookup: {
+            from: "lessons",
+            localField: "_id",
+            foreignField: "authorId",
+            as: "lessons",
+          },
+        },
+
+        {
+          $project: {
+            name: 1,
+            email: 1,
+            role: 1,
+            plan: 1,
+            totalLessons: {
+              $size: "$lessons",
+            },
+          },
+        },
+
+        {
+          $sort: {
+            name: 1,
+          },
+        },
+      ])
+      .toArray();
+
+    res.send(users);
+
+  } catch (error) {
+    console.error(
+      "GET ADMIN USERS ERROR:",
+      error
+    );
+
+    res.status(500).send({
+      message: "Failed to load users",
+      error: error.message,
+    });
+  }
+});
+
+// UPDATE USER ROLE
+
+app.patch(
+  "/api/admin/users/:id/role",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+
+      if (!["user", "admin"].includes(role)) {
+        return res.status(400).send({
+          message: "Invalid role.",
+        });
+      }
+
+      const result =
+        await userCollection.updateOne(
+          {
+            _id: new ObjectId(id),
+          },
+          {
+            $set: {
+              role,
+            },
+          }
+        );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).send({
+          message: "User not found.",
+        });
+      }
+
+      res.send({
+        message: "User role updated successfully.",
+        result,
+      });
+
+    } catch (error) {
+      console.error(
+        "UPDATE USER ROLE ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message: "Failed to update user role",
+        error: error.message,
+      });
+    }
+  }
+);
+
     
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
