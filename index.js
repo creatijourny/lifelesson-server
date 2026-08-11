@@ -815,28 +815,6 @@ app.delete("/api/dashboard/my-lessons/:id", async (req, res) => {
 });
 
 // Get Profile
-// app.get("/api/profile/:userId", async (req, res) => {
-//   try {
-//     const { userId } = req.params;
-
-//     const user = await userCollection.findOne({
-//       _id: new ObjectId(userId),
-//     });
-
-//     if (!user) {
-//       return res.status(404).send({
-//         message: "User not found",
-//       });
-//     }
-
-//     res.send(user);
-
-//   } catch (err) {
-//     res.status(500).send({
-//       message: err.message,
-//     });
-//   }
-// });
 
 app.get("/api/profile/:userId", async (req, res) => {
   try {
@@ -1076,50 +1054,8 @@ app.get("/api/admin/dashboard", async (req, res) => {
   "Oct",
   "Nov",
   "Dec",
-];
+]; 
 
-      
-// const lessonGrowth = await lessonCollection
-//   .aggregate([
-//     {
-//       $match: {
-//         createdAt: {
-//           $exists: true,
-//         },
-//       },
-//     },
-
-//     {
-//       $group: {
-//         _id: {
-//           year: {
-//             $year: "$createdAt",
-//           },
-//           month: {
-//             $month: "$createdAt",
-//           },
-//         },
-
-//         lessons: {
-//           $sum: 1,
-//         },
-//       },
-//     },
-
-//     {
-//       $sort: {
-//         "_id.year": 1,
-//         "_id.month": 1,
-//       },
-//     },
-
-//     {
-//       $limit: 12,
-//     },
-//   ])
-//   .toArray();
-
-// New code
 const lessonGrowth =
   await lessonCollection
     .aggregate([
@@ -1183,52 +1119,8 @@ const lessonGrowth =
     ])
     .toArray();
 
-
-// ==========================================
 // User Growth - Last 12 Months
-// ==========================================
 
-// const userGrowth = await userCollection
-//   .aggregate([
-//     {
-//       $match: {
-//         createdAt: {
-//           $exists: true,
-//         },
-//       },
-//     },
-
-//     {
-//       $group: {
-//         _id: {
-//           year: {
-//             $year: "$createdAt",
-//           },
-//           month: {
-//             $month: "$createdAt",
-//           },
-//         },
-
-//         users: {
-//           $sum: 1,
-//         },
-//       },
-//     },
-
-//     {
-//       $sort: {
-//         "_id.year": 1,
-//         "_id.month": 1,
-//       },
-//     },
-
-//     {
-//       $limit: 12,
-//     },
-//   ])
-//   .toArray();
-
-// New Code
 const userGrowth =
   await userCollection
     .aggregate([
@@ -1444,6 +1336,368 @@ app.patch(
 
       res.status(500).send({
         message: "Failed to update user role",
+        error: error.message,
+      });
+    }
+  }
+);
+
+
+// Manage Lessons
+app.get("/api/admin/lessons", async (req, res) => {
+  try {
+    const {
+      category,
+      visibility,
+      flagged,
+    } = req.query;
+
+    const filter = {};
+
+    if (category) {
+      filter.category = category;
+    }
+
+    if (visibility) {
+      filter.visibility = visibility;
+    }
+
+    if (flagged === "true") {
+      filter.$or = [
+        { flagged: true },
+        { flags: { $exists: true, $ne: [] } },
+      ];
+    }
+
+    const lessons = await lessonCollection
+      .aggregate([
+        {
+          $match: filter,
+        },
+
+        {
+          $lookup: {
+            from: "user",
+            localField: "authorId",
+            foreignField: "_id",
+            as: "author",
+          },
+        },
+
+        {
+          $unwind: {
+            path: "$author",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+
+        {
+          $project: {
+            title: 1,
+            description: 1,
+            category: 1,
+            tone: 1,
+            visibility: 1,
+            accessLevel: 1,
+            featured: {
+              $ifNull: ["$featured", false],
+            },
+            reviewed: {
+              $ifNull: ["$reviewed", false],
+            },
+            flagged: {
+              $ifNull: ["$flagged", false],
+            },
+            flags: 1,
+            createdAt: 1,
+
+            authorName: {
+              $ifNull: [
+                "$author.name",
+                "$authorName",
+              ],
+            },
+
+            authorEmail: "$author.email",
+          },
+        },
+
+        {
+          $sort: {
+            createdAt: -1,
+          },
+        },
+      ])
+      .toArray();
+
+
+    // Stats
+    const publicLessons =
+      await lessonCollection.countDocuments({
+        visibility: "Public",
+      });
+
+    const privateLessons =
+      await lessonCollection.countDocuments({
+        visibility: "Private",
+      });
+
+
+    res.send({
+      lessons,
+      stats: {
+        publicLessons,
+        privateLessons,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "GET ADMIN LESSONS ERROR:",
+      error
+    );
+
+    res.status(500).send({
+      message: "Failed to load admin lessons",
+      error: error.message,
+    });
+  }
+});
+
+
+app.delete(
+  "/api/admin/lessons/:id",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const result =
+        await lessonCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).send({
+          message: "Lesson not found.",
+        });
+      }
+
+      res.send({
+        message:
+          "Lesson deleted successfully.",
+      });
+
+    } catch (error) {
+      console.error(
+        "DELETE ADMIN LESSON ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message: "Failed to delete lesson",
+        error: error.message,
+      });
+    }
+  }
+);
+
+app.patch(
+  "/api/admin/lessons/:id",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const {
+        featured,
+        reviewed,
+      } = req.body;
+
+      const updateFields = {};
+
+      if (
+        typeof featured === "boolean"
+      ) {
+        updateFields.featured = featured;
+      }
+
+      if (
+        typeof reviewed === "boolean"
+      ) {
+        updateFields.reviewed = reviewed;
+      }
+
+      if (
+        Object.keys(updateFields).length === 0
+      ) {
+        return res.status(400).send({
+          message:
+            "No valid update provided.",
+        });
+      }
+
+      const result =
+        await lessonCollection.updateOne(
+          {
+            _id: new ObjectId(id),
+          },
+          {
+            $set: updateFields,
+          }
+        );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).send({
+          message: "Lesson not found.",
+        });
+      }
+
+      res.send({
+        message:
+          "Lesson updated successfully.",
+        result,
+      });
+
+    } catch (error) {
+      console.error(
+        "UPDATE ADMIN LESSON ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message: "Failed to update lesson",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// Admin Lesson route
+app.post(
+  "/api/admin/lessons",
+  async (req, res) => {
+    try {
+      const {
+        title,
+        description,
+        category,
+        tone,
+        visibility,
+        accessLevel,
+      } = req.body;
+
+      if (
+        !title ||
+        !description ||
+        !category
+      ) {
+        return res.status(400).send({
+          message:
+            "Title, description and category are required.",
+        });
+      }
+
+      const lesson = {
+        title,
+        description,
+        category,
+        tone: tone || "",
+
+        visibility:
+          visibility || "Public",
+
+        accessLevel:
+          accessLevel || "Free",
+
+        featured: false,
+        reviewed: true,
+        flagged: false,
+
+        // IMPORTANT:
+        // Don't accept authorId from the browser.
+        // Get it from the authenticated admin session.
+
+        createdAt: new Date(),
+      };
+
+      const result =
+        await lessonCollection.insertOne(
+          lesson
+        );
+
+      res.status(201).send({
+        message:
+          "Lesson created successfully.",
+        lessonId: result.insertedId,
+      });
+
+    } catch (error) {
+      console.error(
+        "ADMIN CREATE LESSON ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message:
+          "Failed to create lesson",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// Admin actions Free-Premium
+app.patch(
+  "/api/admin/lessons/:id/access-level",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { accessLevel } = req.body;
+
+      if (
+        !["Free", "Premium"].includes(
+          accessLevel
+        )
+      ) {
+        return res.status(400).send({
+          message:
+            "Invalid access level",
+        });
+      }
+
+      const result =
+        await lessonCollection.updateOne(
+          {
+            _id: new ObjectId(id),
+          },
+          {
+            $set: {
+              accessLevel,
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).send({
+          message: "Lesson not found",
+        });
+      }
+
+      res.send({
+        message:
+          "Lesson access level updated.",
+        accessLevel,
+      });
+
+    } catch (error) {
+      console.error(
+        "UPDATE ACCESS LEVEL ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message:
+          "Failed to update lesson access level",
         error: error.message,
       });
     }
