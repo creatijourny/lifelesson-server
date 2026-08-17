@@ -28,36 +28,6 @@ const client = new MongoClient(uri, {
   }
 });
 
-// const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`))
-
-// const verifyToken = async (req, res, next) => {
-//   const authHeader = req.headers.authorization
-//   // console.log(authHeader)
-
-//   if(!authHeader || !authHeader.startsWith("Bearer ")){
-//     res.status(401).send({msg: "Unauthorized"})
-//   }
-//   // "Bearer ey8u7ytrwl902H".split(" ") // ["Bearer", "ey8u7ytrwl902H"]
-//   const token = authHeader.split(" ")[1]
-
-//   if(!token) {
-//     res.status(401).send({msg: "Unauthorized"})
-//   }
-
-//   try{
-//     const {payload} = await jwtVerify(token, JWKS)
-//     console.log(payload)
-//     next ()
-
-//   } catch (error){
-//     console.log(error)
-//     res.status(401).send({msg: "Unauthorized"})
-
-//   }
-
-//   // next ()
-// }
-
 // New code Verify Token
 const JWKS = createRemoteJWKSet(
   new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
@@ -1436,7 +1406,7 @@ const formattedUserGrowth =
 
 // GET ADMIN USERS
 
-app.get("/api/admin/users", async (req, res) => {
+app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const users = await userCollection
       .aggregate([
@@ -1517,7 +1487,7 @@ app.get("/api/admin/users", async (req, res) => {
 // UPDATE USER ROLE
 
 app.patch(
-  "/api/admin/users/:id/role",
+  "/api/admin/users/:id/role", verifyToken, verifyAdmin,
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -1526,6 +1496,13 @@ app.patch(
       if (!["user", "admin"].includes(role)) {
         return res.status(400).send({
           message: "Invalid role.",
+        });
+      }
+
+      if (req.user.id === id) {
+        return res.status(400).send({
+          message:
+            "You cannot change your own role.",
         });
       }
 
@@ -1568,7 +1545,7 @@ app.patch(
 
 
 // Manage Lessons
-app.get("/api/admin/lessons", async (req, res) => {
+app.get("/api/admin/lessons", verifyToken, verifyAdmin, async (req, res) => {
   try {
     
     const {
@@ -1882,11 +1859,7 @@ app.post(
 
         featured: false,
         reviewed: true,
-        flagged: false,
-
-        // IMPORTANT:
-        // Don't accept authorId from the browser.
-        // Get it from the authenticated admin session.
+        flagged: false,       
 
         createdAt: new Date(),
       };
