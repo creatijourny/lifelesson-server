@@ -15,8 +15,6 @@ app.get('/', (req, res) => {
   res.send('Hello from life lesson!')
 })
 
-
-
 const uri = process.env.MONGO_DB_URI;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -125,10 +123,7 @@ async function run() {
 
     res.send({pay_result, user_result});
 
-
   })
-   
-
     
 app.get("/api/lessons", async (req, res) => {
   try {
@@ -235,65 +230,8 @@ res.send({
   }
 });
 
-// get single lesson
-// app.get("/api/lessons/:id", verifyToken, async (req, res) => {
-//   try {
-//     const { id } = req.params;
 
-//     const lesson = await lessonCollection.findOne({
-//       _id: new ObjectId(id),
-//     });
-
-//     if (!lesson) {
-//       return res.status(404).send({
-//         message: "Lesson not found",
-//       });
-//     }
-
-//     // Free lessons are public
-//     if (lesson.accessLevel !== "Premium") {
-//       return res.send(lesson);
-//     }
-
-//     // Optional authentication for Premium lessons
-//     let user = null;
-
-//     const authHeader = req.headers.authorization;
-
-//     if (authHeader?.startsWith("Bearer ")) {
-//       try {
-//         const token = authHeader.split(" ")[1];
-//         const { payload } = await jwtVerify(token, JWKS);
-//         user = payload;
-//       } catch {
-//         user = null;
-//       }
-//     }
-
-//     const isOwner = user?.id === lesson.authorId;
-//     const isAdmin = user?.role === "admin";
-//     const isPremium = user?.plan === "premium";
-
-//     if (!isOwner && !isAdmin && !isPremium) {
-//       return res.status(403).send({
-//         message: "Premium membership required.",
-//       });
-//     }
-
-//     return res.send(lesson);
-//   } catch (error) {
-//     console.error("GET LESSON ERROR:", error);
-
-//     res.status(500).send({
-//       message: "Failed to fetch lesson",
-//       error: error.message,
-//     });
-//   }
-// });
-
-app.get(
-  "/api/lessons/:id",
-  verifyToken,
+app.get("/api/lessons/:id", verifyToken,
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -345,9 +283,6 @@ app.get(
     }
   }
 );
-
-
-
 
     // New app.post
     app.post(
@@ -415,7 +350,6 @@ app.get(
   }
 );
 
-
 // Count lessons
 app.get("/api/users/:id/lesson-count", async(req, res) => {
   const {id} = req.params;
@@ -464,8 +398,6 @@ app.post("/api/favorites", async (req, res) => {
 });
 
 
-
-
 app.get("/api/favorites/count/:lessonId", async (req, res) => {
   const count = await favoriteCollection.countDocuments({
     lessonId: new ObjectId(req.params.lessonId),
@@ -473,7 +405,6 @@ app.get("/api/favorites/count/:lessonId", async (req, res) => {
 
   res.send({ count });
 });
-
 
 
 // check saved
@@ -516,7 +447,6 @@ app.delete("/api/favorites", async (req, res) => {
 });
 
 });
-
 
 // Toggle Like
 
@@ -568,11 +498,9 @@ app.patch("/api/lessons/:id/like", async (req, res) => {
 
         return res.send({
 
-            "liked": false,
-  
+            "liked": false,  
 
         });
-
     }
 
     await lessonCollection.updateOne(
@@ -597,8 +525,7 @@ app.patch("/api/lessons/:id/like", async (req, res) => {
 
     res.send({
 
-        "liked": true,
-  
+        "liked": true,  
 
     });
 
@@ -654,8 +581,6 @@ app.post("/api/comments", async (req, res) => {
     res.send(result);
 
 });
-
-
 
 app.get("/api/comments/:lessonId", async (req, res) => {
   try {
@@ -746,7 +671,6 @@ app.delete("/api/comments/:id", async (req, res) => {
     });
   }
 });
-
 
 // Dashboard
 app.get("/api/dashboard/:userId", async (req, res) => {
@@ -886,8 +810,6 @@ app.get("/api/dashboard/my-lessons/:id", async (req, res) => {
   }
 });
 
-
-
 app.put("/api/dashboard/my-lessons/:id", async (req, res) => {
   try {
 
@@ -914,7 +836,6 @@ if (
       "Only Premium members can create Premium lessons.",
   });
 }
-
 
     const result =
       await lessonCollection.updateOne(
@@ -1015,7 +936,6 @@ app.get("/api/profile/:userId", async (req, res) => {
   }
 });
 
-
 // PATCH Profile
 
 app.patch("/api/profile/:userId", async (req, res) => {
@@ -1049,8 +969,6 @@ app.patch("/api/profile/:userId", async (req, res) => {
   }
 });
 
-
-
 // Profile Stats
 
 app.get("/api/profile/stats/:userId", async (req, res) => {
@@ -1078,8 +996,6 @@ app.get("/api/profile/stats/:userId", async (req, res) => {
     });
   }
 });
-
-
 
 
 app.get("/api/profile/lessons/:userId", async (req, res) => {
@@ -1361,18 +1277,7 @@ const formattedUserGrowth =
     month:
       monthNames[item._id.month - 1],
     users: item.users,
-  }));
-
-
-      // Send dashboard data
-    //    res.send({
-    //   totalUsers,
-    //   totalPublicLessons,
-    //   totalReportedLessons,
-    //   todaysNewLessons,
-    //   mostActiveContributors:
-    //     contributors,
-    // });
+  }));   
 
     // New res.send
   res.send({
@@ -1387,7 +1292,6 @@ const formattedUserGrowth =
 
   userGrowth: formattedUserGrowth,
 });
-
 
   } catch (error) {
 
@@ -1485,7 +1389,6 @@ app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // UPDATE USER ROLE
-
 app.patch(
   "/api/admin/users/:id/role", verifyToken, verifyAdmin,
   async (req, res) => {
@@ -1542,7 +1445,6 @@ app.patch(
     }
   }
 );
-
 
 // Manage Lessons
 app.get("/api/admin/lessons", verifyToken, verifyAdmin, async (req, res) => {
@@ -1714,8 +1616,7 @@ app.get("/api/admin/lessons", verifyToken, verifyAdmin, async (req, res) => {
 });
 
 
-app.delete(
-  "/api/admin/lessons/:id",
+app.delete("/api/admin/lessons/:id",
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -1750,8 +1651,7 @@ app.delete(
   }
 );
 
-app.patch(
-  "/api/admin/lessons/:id",
+app.patch("/api/admin/lessons/:id",
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -1820,7 +1720,7 @@ app.patch(
   }
 );
 
-// Admin Lesson route
+// Admin Lesson
 app.post(
   "/api/admin/lessons",
   async (req, res) => {
@@ -2242,7 +2142,6 @@ app.get(
     }
   }
 );
-
     
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -2253,9 +2152,6 @@ app.get(
 }
 run().catch(console.dir);
 
-
-
-
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`)
-})
+});
