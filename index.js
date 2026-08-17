@@ -9,6 +9,7 @@ app.use(express.json());
 
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const { ObjectId } = require("mongodb");
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 
 app.get('/', (req, res) => {
   res.send('Hello from life lesson!')
@@ -27,7 +28,103 @@ const client = new MongoClient(uri, {
   }
 });
 
+// const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`))
 
+// const verifyToken = async (req, res, next) => {
+//   const authHeader = req.headers.authorization
+//   // console.log(authHeader)
+
+//   if(!authHeader || !authHeader.startsWith("Bearer ")){
+//     res.status(401).send({msg: "Unauthorized"})
+//   }
+//   // "Bearer ey8u7ytrwl902H".split(" ") // ["Bearer", "ey8u7ytrwl902H"]
+//   const token = authHeader.split(" ")[1]
+
+//   if(!token) {
+//     res.status(401).send({msg: "Unauthorized"})
+//   }
+
+//   try{
+//     const {payload} = await jwtVerify(token, JWKS)
+//     console.log(payload)
+//     next ()
+
+//   } catch (error){
+//     console.log(error)
+//     res.status(401).send({msg: "Unauthorized"})
+
+//   }
+
+//   // next ()
+// }
+
+// New code Verify Token
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+);
+
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).send({
+        message: "Unauthorized",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    const { payload } = await jwtVerify(token, JWKS);
+
+    req.user = payload;
+
+    next();
+  } catch (error) {
+    return res.status(401).send({
+      message: "Unauthorized",
+    });
+  }
+};
+
+// verifyAdmin
+const verifyAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res
+      .status(401)
+      .send({ message: "Unauthorized" });
+  }
+
+  if (req.user.role !== "admin") {
+    return res
+      .status(403)
+      .send({
+        message: "Admin access required",
+      });
+  }
+
+  next();
+};
+
+// verifyPremium
+const verifyPremium = (req, res, next) => {
+  if (!req.user) {
+    return res
+      .status(401)
+      .send({ message: "Login required" });
+  }
+
+  if (req.user.plan !== "premium") {
+    return res
+      .status(403)
+      .send({
+        message:
+          "Premium subscription required",
+      });
+  }
+
+  next();
+};
 
 async function run() {
   try {
@@ -169,85 +266,184 @@ res.send({
 });
 
 // get single lesson
-app.get("/api/lessons/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
+// app.get("/api/lessons/:id", verifyToken, async (req, res) => {
+//   try {
+//     const { id } = req.params;
 
-    const lesson = await lessonCollection.findOne({
-      _id: new ObjectId(id),
-    });
+//     const lesson = await lessonCollection.findOne({
+//       _id: new ObjectId(id),
+//     });
 
-    if (!lesson) {
-      return res.status(404).send({
-        message: "Lesson not found",
+//     if (!lesson) {
+//       return res.status(404).send({
+//         message: "Lesson not found",
+//       });
+//     }
+
+//     // Free lessons are public
+//     if (lesson.accessLevel !== "Premium") {
+//       return res.send(lesson);
+//     }
+
+//     // Optional authentication for Premium lessons
+//     let user = null;
+
+//     const authHeader = req.headers.authorization;
+
+//     if (authHeader?.startsWith("Bearer ")) {
+//       try {
+//         const token = authHeader.split(" ")[1];
+//         const { payload } = await jwtVerify(token, JWKS);
+//         user = payload;
+//       } catch {
+//         user = null;
+//       }
+//     }
+
+//     const isOwner = user?.id === lesson.authorId;
+//     const isAdmin = user?.role === "admin";
+//     const isPremium = user?.plan === "premium";
+
+//     if (!isOwner && !isAdmin && !isPremium) {
+//       return res.status(403).send({
+//         message: "Premium membership required.",
+//       });
+//     }
+
+//     return res.send(lesson);
+//   } catch (error) {
+//     console.error("GET LESSON ERROR:", error);
+
+//     res.status(500).send({
+//       message: "Failed to fetch lesson",
+//       error: error.message,
+//     });
+//   }
+// });
+
+app.get(
+  "/api/lessons/:id",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const lesson = await lessonCollection.findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!lesson) {
+        return res.status(404).send({
+          message: "Lesson not found",
+        });
+      }
+
+      const isOwner =
+        req.user.id === lesson.authorId;
+
+      const isAdmin =
+        req.user.role === "admin";
+
+      const isPremium =
+        req.user.plan === "premium";
+
+      // Premium restriction
+      if (
+        lesson.accessLevel === "Premium" &&
+        !isOwner &&
+        !isAdmin &&
+        !isPremium
+      ) {
+        return res.status(403).send({
+          message:
+            "Premium membership required.",
+        });
+      }
+
+      res.send(lesson);
+    } catch (error) {
+      console.error(
+        "GET LESSON ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message:
+          "Failed to fetch lesson",
+        error: error.message,
       });
     }
-    const isPremium =
-  user?.plan === "premium";
-
-if (
-  lesson.accessLevel === "Premium" &&
-  !isOwner &&
-  !isPremium
-) {
-  return res.status(403).send({
-    message:
-      "Premium membership required.",
-  });
-}
-
-    res.send(lesson);
-
-  } catch (error) {
-    res.status(500).send({
-      message: error.message,
-    });
   }
-});  
+);
+
+
 
 
     // New app.post
-    app.post("/api/lessons", async (req, res) => {
-  try {
-    const lesson = {
-      ...req.body,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    app.post(
+  "/api/lessons",
+  verifyToken,
+  async (req, res) => {
+    try {
+      
+      const authUser = req.user;
+      
+      const user = await userCollection.findOne({
+        _id: new ObjectId(authUser.id),
+      });
 
-    // const lesson = req.body;
+      if (!user) {
+        return res.status(404).send({
+          message: "User not found",
+        });
+      }
+      
+      if (
+        req.body.accessLevel === "Premium" &&
+        user.plan !== "premium"
+      ) {
+        return res.status(403).send({
+          message:
+            "Only Premium members can create Premium lessons.",
+        });
+      }
+      
+      const lesson = {
+        ...req.body,
 
-// Verify author's current plan
-const user = await userCollection.findOne({
-  _id: new ObjectId(lesson.authorId),
-});
+        // Never trust client-sent author info
+        authorId: authUser.id,
+        authorName: user.name,
+        authorEmail: user.email,
 
-if (!user) {
-  return res.status(404).send({
-    message: "User not found",
-  });
-}
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
 
-if (
-  lesson.accessLevel === "Premium" &&
-  user.plan !== "premium"
-) {
-  return res.status(403).send({
-    message:
-      "Only Premium members can create Premium lessons.",
-  });
-}
+      const result =
+        await lessonCollection.insertOne(
+          lesson
+        );
 
-    const result = await lessonCollection.insertOne(lesson);
+      res.send({
+        message:
+          "Lesson created successfully.",
+        insertedId: result.insertedId,
+      });
+    } catch (error) {
+      console.error(
+        "CREATE LESSON ERROR:",
+        error
+      );
 
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({
-      message: "Failed to create lesson",
-      error: error.message,
-    });
+      res.status(500).send({
+        message:
+          "Failed to create lesson",
+        error: error.message,
+      });
+    }
   }
-});
+);
 
 
 // Count lessons
@@ -1245,14 +1441,6 @@ app.get("/api/admin/users", async (req, res) => {
     const users = await userCollection
       .aggregate([
         {
-        //   $lookup: {
-        //     from: "lessons",
-        //     localField: "_id",
-        //     foreignField: "authorId",
-        //     as: "lessons",
-        //   },
-        // },
-
          $lookup: {
     from: "lessons",
     let: {
@@ -1299,9 +1487,7 @@ app.get("/api/admin/users", async (req, res) => {
             role: 1,
             plan: 1,
             totalLessons: 1,
-            // totalLessons: {
-            //   $size: "$lessons",
-            // },
+            
           },
         },
 
@@ -2047,6 +2233,37 @@ app.patch(
       res.status(500).send({
         message:
           "Failed to clear reports",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// Featured lessons
+app.get(
+  "/api/featured-lessons",
+  async (req, res) => {
+    try {
+      const lessons =
+        await lessonCollection
+          .find({
+            featured: true,
+            visibility: "Public",
+          })
+          .sort({ createdAt: -1 })
+          .limit(6)
+          .toArray();
+
+      res.send(lessons);
+    } catch (error) {
+      console.error(
+        "FEATURED LESSONS ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message:
+          "Failed to load featured lessons",
         error: error.message,
       });
     }
