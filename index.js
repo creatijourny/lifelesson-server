@@ -97,7 +97,7 @@ const verifyPremium = (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
 
     const database = client.db("life_lesson_db");
@@ -129,43 +129,6 @@ app.get("/api/lessons", async (req, res) => {
   try {
     const { search, category, page, limit } = req.query;
 
-    // const currentPage = Math.max(parseInt(page, 10) || 1, 1);
-    // const perPage = Math.min(
-    //   Math.max(parseInt(limit, 10) || 9, 1),
-    //   50
-    // );
-
-    // const skip = (currentPage - 1) * perPage;
-
-    // const filter = {
-    //   visibility: "Public",
-    // };
-
-    // // Search by title
-    // if (search) {
-    //   filter.title = {
-    //     $regex: search,
-    //     $options: "i",
-    //   };
-    // }
-
-    // // Filter by category
-    // if (category) {
-    //   filter.category = category;
-    // }
-
-    // const total = await lessonCollection.countDocuments(
-    //   filter);
-    
-
-    // const lessons = await lessonCollection
-    //   .find(filter)
-    //   .sort({ _id: -1 })
-    //   .skip(skip),
-    //   .limit(perPage)
-    //   .toArray();
-
-    // res.send(lessons);
 
     // New code
     const currentPage = Math.max(
@@ -229,6 +192,37 @@ res.send({
     });
   }
 });
+
+// Featured lessons
+app.get(
+  "/api/featured-lessons",
+  async (req, res) => {
+    try {
+      const lessons =
+        await lessonCollection
+          .find({
+            featured: true,
+            visibility: "Public",
+          })
+          .sort({ createdAt: -1 })
+          .limit(6)
+          .toArray();
+
+      res.send(lessons);
+    } catch (error) {
+      console.error(
+        "FEATURED LESSONS ERROR:",
+        error
+      );
+
+      res.status(500).send({
+        message:
+          "Failed to load featured lessons",
+        error: error.message,
+      });
+    }
+  }
+);
 
 
 app.get("/api/lessons/:id", verifyToken,
@@ -1310,7 +1304,7 @@ const formattedUserGrowth =
 
 // GET ADMIN USERS
 
-app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
+app.get("/api/admin/users", verifyToken, async (req, res) => {
   try {
     const users = await userCollection
       .aggregate([
@@ -1390,7 +1384,7 @@ app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
 
 // UPDATE USER ROLE
 app.patch(
-  "/api/admin/users/:id/role", verifyToken, verifyAdmin,
+  "/api/admin/users/:id/role", verifyToken,
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -1447,7 +1441,7 @@ app.patch(
 );
 
 // Manage Lessons
-app.get("/api/admin/lessons", verifyToken, verifyAdmin, async (req, res) => {
+app.get("/api/admin/lessons", verifyToken, async (req, res) => {
   try {
     
     const {
@@ -1790,81 +1784,7 @@ app.post(
   }
 );
 
-// Admin actions Free-Premium
-// app.patch(
-//   "/api/admin/lessons/:id/access-level",
-//   async (req, res) => {
-//     try {
 
-//       // Verify authentication
-//       const user = req.user;
-
-//       if (!user) {
-//         return res.status(401).send({
-//           message: "Unauthorized",
-//         });
-//       }
-
-//       // 2. Verify admin role
-//       if (user.role !== "admin") {
-//         return res.status(403).send({
-//           message: "Admin access required",
-//         });
-//       }
-
-//       const { id } = req.params;
-//       const { accessLevel } = req.body;
-
-//       if (
-//         !["Free", "Premium"].includes(
-//           accessLevel
-//         )
-//       ) {
-//         return res.status(400).send({
-//           message:
-//             "Invalid access level",
-//         });
-//       }
-
-//       const result =
-//         await lessonCollection.updateOne(
-//           {
-//             _id: new ObjectId(id),
-//           },
-//           {
-//             $set: {
-//               accessLevel,
-//               updatedAt: new Date(),
-//             },
-//           }
-//         );
-
-//       if (result.matchedCount === 0) {
-//         return res.status(404).send({
-//           message: "Lesson not found",
-//         });
-//       }
-
-//       res.send({
-//         message:
-//           "Lesson access level updated.",
-//         accessLevel,
-//       });
-
-//     } catch (error) {
-//       console.error(
-//         "UPDATE ACCESS LEVEL ERROR:",
-//         error
-//       );
-
-//       res.status(500).send({
-//         message:
-//           "Failed to update lesson access level",
-//         error: error.message,
-//       });
-//     }
-//   }
-// );
 
 // New code (works well without JWT)
 app.patch(
@@ -2112,38 +2032,9 @@ app.patch(
   }
 );
 
-// Featured lessons
-app.get(
-  "/api/featured-lessons",
-  async (req, res) => {
-    try {
-      const lessons =
-        await lessonCollection
-          .find({
-            featured: true,
-            visibility: "Public",
-          })
-          .sort({ createdAt: -1 })
-          .limit(6)
-          .toArray();
 
-      res.send(lessons);
-    } catch (error) {
-      console.error(
-        "FEATURED LESSONS ERROR:",
-        error
-      );
-
-      res.status(500).send({
-        message:
-          "Failed to load featured lessons",
-        error: error.message,
-      });
-    }
-  }
-);
     
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
